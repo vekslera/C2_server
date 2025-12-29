@@ -22,6 +22,7 @@ var/
 wheels/
 share/python-wheels/
 *.egg-info/
+Assignment/
 .installed.cfg
 *.egg
 MANIFEST
@@ -205,3 +206,6 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+GitHub Token
+git_hub_token
