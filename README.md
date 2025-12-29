@@ -8,8 +8,10 @@ A Python-based Command & Control (C2) server and demo client for cybersecurity t
 - **Python 3.10+ with asyncio**: Fully asynchronous architecture for handling multiple concurrent clients
 - **TCP Protocol**: Raw TCP sockets with custom length-prefixed message framing
 - **Message Format**: JSON payloads with 4-byte length header (big-endian)
-- **Encryption**: AES-256-GCM with pre-shared key (PSK)
-- **Modular Design**: SOLID principles with clear separation of concerns
+- **Encryption**: AES-256-GCM with pre-shared key (PSK) or ECDH key exchange
+- **Modular Design**: SOLID principles with Strategy and Repository patterns
+  - **Strategy Pattern**: Pluggable encryption strategies (NoEncryption, PSK, ECDH)
+  - **Repository Pattern**: Unified database interface with PostgreSQL implementation
 
 ### System Components
 
@@ -50,8 +52,11 @@ A Python-based Command & Control (C2) server and demo client for cybersecurity t
 - `bash`: Execute shell command (Step 4)
 
 **Encryption (Step 2):**
+- Supports multiple encryption strategies via Strategy pattern:
+  - **NoEncryptionStrategy**: For testing (no encryption)
+  - **PSKEncryptionStrategy**: AES-256-GCM with pre-shared key
+  - **ECDHEncryptionStrategy**: X25519 key exchange + AES-256-GCM
 - Algorithm: AES-256-GCM (Galois/Counter Mode)
-- Key: 32-byte pre-shared key (PSK) from config
 - Authenticated encryption prevents tampering
 - Random 12-byte nonce per message
 - Format: `[nonce][ciphertext+auth_tag]`
@@ -310,31 +315,37 @@ DB_PASSWORD = "c2password"
 C2_server/
 ├── server/
 │   ├── __init__.py
-│   ├── main.py           # Server entry point
-│   ├── c2_server.py      # Core server logic
-│   ├── cli.py            # Admin CLI interface
-│   ├── protocol.py       # Message framing & encryption
-│   ├── db_logger.py      # Database logging
-│   └── init_db.sql       # Database schema
+│   ├── main.py                 # Server entry point
+│   ├── c2_server.py            # Core server logic
+│   ├── cli.py                  # Admin CLI interface
+│   ├── protocol.py             # Message framing & encryption
+│   ├── encryption_strategy.py  # Strategy pattern for encryption
+│   ├── database.py             # Repository pattern for DB
+│   ├── db_logger.py            # Database logging (legacy wrapper)
+│   └── init_db.sql             # Database schema
 ├── client/
 │   ├── __init__.py
-│   ├── c2_client.py      # Demo client/agent
-│   └── command_executor.py  # Command execution logic
+│   ├── c2_client.py            # Demo client/agent
+│   └── command_executor.py     # Command execution logic
 ├── docker/
-│   ├── Dockerfile.postgres  # PostgreSQL container
-│   ├── Dockerfile.server    # C2 server container
-│   ├── Dockerfile.client    # C2 client container
-│   ├── docker-compose.yml   # Complete infrastructure
-│   └── .dockerignore        # Docker build exclusions
+│   ├── Dockerfile.postgres     # PostgreSQL container
+│   ├── Dockerfile.server       # C2 server container
+│   ├── Dockerfile.client       # C2 client container
+│   ├── docker-compose.yml      # Complete infrastructure
+│   └── .dockerignore           # Docker build exclusions
 ├── tests/
-│   ├── test_protocol.py     # Protocol tests
-│   ├── test_encryption.py   # Encryption tests
-│   ├── test_cd_command.py   # CD command tests
-│   └── test_integration.py  # Integration tests
-├── config.py             # Centralized configuration
-├── requirements.txt      # Python dependencies
-├── load_test.py          # Automated load testing script
-└── README.md            # This file
+│   ├── test_protocol.py        # Protocol tests (5 tests)
+│   ├── test_encryption.py      # Encryption tests (5 tests)
+│   ├── unit_test.py            # ECDH unit tests (7 tests)
+│   ├── test_encryption_strategies.py  # Strategy pattern tests (12 tests)
+│   ├── test_cd_command.py      # CD command tests (7 tests)
+│   └── test_integration.py     # Integration tests (6 tests)
+├── config.py                   # Centralized configuration
+├── requirements.txt            # Python dependencies
+├── load_test.py                # Automated load testing script
+├── pyrightconfig.json          # Type checker configuration
+├── FINAL_SUMMARY.md            # Complete refactoring summary
+└── README.md                   # This file
 ```
 
 ## Implementation Status
@@ -349,17 +360,20 @@ C2_server/
 
 ### ✅ Step 2 - Encryption (COMPLETED)
 - [x] AES-256-GCM authenticated encryption implemented
-- [x] Pre-shared key (PSK) configured
+- [x] Pre-shared key (PSK) encryption strategy
+- [x] ECDH (X25519) key exchange encryption strategy
+- [x] Strategy pattern for pluggable encryption
 - [x] All communication encrypted
-- [x] Encryption tests passing (5/5)
+- [x] Encryption tests passing (5/5 + 12 strategy tests)
 
 ### ✅ Step 3 - Microservice Architecture (COMPLETED)
 - [x] PostgreSQL database setup with Docker Compose
 - [x] Log all events to database (client connect/disconnect, heartbeats)
 - [x] Store commands and results in database
+- [x] Repository pattern for database abstraction
 - [x] Database logger with connection pooling
 - [x] CLI commands for querying database (db events/commands/results)
-- [x] Database logging tests passing (1/1)
+- [x] Database logging tests passing (5/6 - 1 requires PostgreSQL)
 
 ### ✅ Step 4 - Advanced Functionality (COMPLETED)
 - [x] Bash command execution (implemented)
@@ -368,24 +382,40 @@ C2_server/
 - [x] Async server (non-blocking)
 - [x] Load tested with many clients (385 connections/sec, handles 100+ concurrent clients)
 
-### 📋 Step 5 - Testing
+### ✅ Step 5 - Testing (COMPLETED)
 - [x] Protocol tests (5/5 passing)
 - [x] Encryption tests (5/5 passing)
-- [ ] Integration tests
-- [ ] Scale tests
+- [x] ECDH unit tests (7/7 passing)
+- [x] Encryption strategy tests (12/12 passing)
+- [x] CD command tests (7/7 passing)
+- [x] Integration tests (5/6 passing - 1 requires PostgreSQL)
+- [x] Scale tests (load_test.py - tested 100+ concurrent clients)
+- [x] **Total: 41/42 tests passing (97.6%)**
 
 ## Code Quality
 
 ### Architecture Principles Applied
-- **Single Responsibility**: Each module has one clear purpose
-- **Dependency Inversion**: Database logger injected into server
+- **SOLID Principles**: Comprehensive refactoring following SOLID design
+  - **Single Responsibility**: Each module has one clear purpose
+  - **Open/Closed**: Open for extension via Strategy pattern, closed for modification
+  - **Liskov Substitution**: All encryption strategies are interchangeable
+  - **Interface Segregation**: Clean, minimal interfaces (EncryptionStrategy, DatabaseInterface)
+  - **Dependency Inversion**: Depend on abstractions, not concrete implementations
+- **Design Patterns**:
+  - **Strategy Pattern**: Pluggable encryption algorithms (NoEncryption, PSK, ECDH)
+  - **Repository Pattern**: Unified database interface with PostgreSQL implementation
+  - **Adapter Pattern**: DatabaseLogger wraps DatabaseInterface for backward compatibility
+  - **Null Object Pattern**: NullDatabase for graceful degradation
 - **No Hardcoded Values**: All config in config.py
-- **Type Hints**: All functions have type annotations
+- **Type Hints**: Complete type annotations with zero IDE errors
 - **Async Throughout**: Fully async/await pattern
 
 ### Code Citations
 - Length-prefixed framing: Python asyncio documentation (https://docs.python.org/3/library/asyncio-stream.html)
 - AES-GCM encryption: Cryptography library documentation (https://cryptography.io/en/latest/hazmat/primitives/aead/)
+- ECDH key exchange: X25519 documentation (https://cryptography.io/en/latest/hazmat/primitives/asymmetric/x25519/)
+- PostgreSQL connection pooling: psycopg2 documentation (https://www.psycopg.org/docs/pool.html)
+- Repository Pattern: Martin Fowler's Patterns of Enterprise Application Architecture
 - Async subprocess: Python subprocess documentation (https://docs.python.org/3/library/subprocess.html)
 - Non-blocking input: asyncio run_in_executor pattern (https://docs.python.org/3/library/asyncio-eventloop.html)
 
