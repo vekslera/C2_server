@@ -21,6 +21,12 @@ class C2CLI:
         """
         self.server = server
         self.running = True
+        self.prompt = "C2> "
+
+    def reprint_prompt(self) -> None:
+        """Reprint the prompt after async output"""
+        # Move to new line and reprint prompt
+        print(f"\r{self.prompt}", end='', flush=True)
 
     def print_help(self) -> None:
         """Print available commands"""
@@ -184,6 +190,9 @@ Examples:
 
         Uses asyncio to handle input without blocking the server
         """
+        # Register CLI with server for prompt refresh
+        self.server.cli = self
+
         print("C2 Server CLI - Type 'help' for commands")
 
         # Run input loop in executor to avoid blocking
@@ -196,7 +205,7 @@ Examples:
                 # Read input without blocking event loop
                 command_line = await loop.run_in_executor(
                     None,
-                    lambda: input("C2> ")
+                    lambda: input(self.prompt)
                 )
 
                 await self.handle_command(command_line)

@@ -70,6 +70,7 @@ class C2Server:
         self.clients: Dict[str, ClientConnection] = {}
         self.server: Optional[asyncio.Server] = None
         self.db_logger = None  # Will be set in Step 3
+        self.cli = None  # Will be set by CLI for prompt refresh
         logger.info(f"C2 Server initialized (encryption: {encryption_key is not None})")
 
     def set_db_logger(self, db_logger) -> None:
@@ -176,6 +177,10 @@ class C2Server:
             print(f"Success: {success}")
             print(f"Output:\n{result}")
             print()
+
+            # Reprint CLI prompt if CLI is set
+            if self.cli:
+                self.cli.reprint_prompt()
 
         else:
             logger.warning(f"Unknown message type from {client.client_id}: {msg_type}")
