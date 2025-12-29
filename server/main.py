@@ -21,11 +21,11 @@ async def main():
     print("C2 Server - Command & Control Server")
     print("=" * 60)
 
-    # Initialize server (without encryption for Step 1)
+    # Initialize server with AES-256-GCM encryption (Step 2)
     server = C2Server(
         config.SERVER_HOST,
         config.SERVER_PORT,
-        encryption_key=None  # Will be enabled in Step 2
+        encryption_key=config.ENCRYPTION_PSK
     )
 
     # Start server in background

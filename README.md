@@ -49,6 +49,13 @@ A Python-based Command & Control (C2) server and demo client for cybersecurity t
 - `kill`: Terminate client
 - `bash`: Execute shell command (Step 4)
 
+**Encryption (Step 2):**
+- Algorithm: AES-256-GCM (Galois/Counter Mode)
+- Key: 32-byte pre-shared key (PSK) from config
+- Authenticated encryption prevents tampering
+- Random 12-byte nonce per message
+- Format: `[nonce][ciphertext+auth_tag]`
+
 ## Quick Start Guide
 
 ### Prerequisites
@@ -204,9 +211,11 @@ C2_server/
 - [x] Echo command with response
 - [x] Kill command
 
-### 🔄 Step 2 - Encryption (READY)
-- [x] Protocol supports AES-256-GCM encryption
-- [ ] Encryption enabled (ready to enable)
+### ✅ Step 2 - Encryption (COMPLETED)
+- [x] AES-256-GCM authenticated encryption implemented
+- [x] Pre-shared key (PSK) configured
+- [x] All communication encrypted
+- [x] Encryption tests passing (5/5)
 
 ### 📋 Step 3 - Microservice Architecture
 - [ ] PostgreSQL database setup
@@ -221,7 +230,8 @@ C2_server/
 - [ ] Load tested with many clients
 
 ### 📋 Step 5 - Testing
-- [ ] Unit tests
+- [x] Protocol tests (5/5 passing)
+- [x] Encryption tests (5/5 passing)
 - [ ] Integration tests
 - [ ] Scale tests
 

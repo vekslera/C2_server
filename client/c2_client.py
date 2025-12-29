@@ -313,7 +313,7 @@ async def main():
     client = C2Client(
         config.CLIENT_SERVER_HOST,
         config.CLIENT_SERVER_PORT,
-        encryption_key=None  # Will be enabled in Step 2
+        encryption_key=config.ENCRYPTION_PSK
     )
 
     try:
