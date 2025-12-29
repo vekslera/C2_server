@@ -93,6 +93,11 @@ class C2Server:
         self.clients[client_id] = client
 
         logger.info(f"New client connected: {client_id} from {address}")
+        print(f"[New client connected: {client_id}]")
+
+        # Reprint prompt
+        if self.cli:
+            self.cli.reprint_prompt()
 
         # Log to database if available
         if self.db_logger:
@@ -112,6 +117,12 @@ class C2Server:
 
                 if message is None:
                     logger.info(f"Client {client_id} disconnected")
+                    print(f"[Client disconnected: {client_id}]")
+
+                    # Reprint prompt
+                    if self.cli:
+                        self.cli.reprint_prompt()
+
                     break
 
                 await self.process_client_message(client, message)
