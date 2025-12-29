@@ -162,6 +162,15 @@ class C2Server:
         if msg_type == "heartbeat":
             # Update heartbeat timestamp
             client.update_heartbeat()
+
+            # Log to database if available
+            if self.db_logger:
+                await self.db_logger.log_event(
+                    "heartbeat",
+                    client.client_id,
+                    f"Heartbeat from {client.address}"
+                )
+
             # Send acknowledgment
             await self.protocol.write_message(client.writer, {
                 "type": "heartbeat_ack"
