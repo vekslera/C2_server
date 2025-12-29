@@ -145,6 +145,43 @@ class TestC2Integration:
         await client.disconnect()
 
 
+@pytest.mark.asyncio
+async def test_database_logging():
+    """Test database logging functionality (Step 3)"""
+    from server.db_logger import DatabaseLogger
+    import psycopg2
+
+    # Create and connect database logger
+    db_logger = DatabaseLogger()
+    db_logger.connect()
+
+    try:
+        # Log an event
+        await db_logger.log_event("test_event", "test_client_123", "test details")
+
+        # Verify it was logged
+        conn = psycopg2.connect(
+            host=config.DB_HOST,
+            port=config.DB_PORT,
+            database=config.DB_NAME,
+            user=config.DB_USER,
+            password=config.DB_PASSWORD
+        )
+        cursor = conn.cursor()
+        cursor.execute("SELECT event_type, client_id FROM events WHERE client_id = 'test_client_123'")
+        result = cursor.fetchone()
+
+        assert result is not None
+        assert result[0] == "test_event"
+        assert result[1] == "test_client_123"
+
+        cursor.close()
+        conn.close()
+
+    finally:
+        db_logger.close()
+
+
 def test_config_values():
     """Test that configuration values are set correctly"""
     assert config.SERVER_PORT > 0

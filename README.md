@@ -70,6 +70,21 @@ A Python-based Command & Control (C2) server and demo client for cybersecurity t
 pip3 install -r requirements.txt
 ```
 
+**Start Database (Step 3):**
+```bash
+docker-compose up -d
+```
+
+To stop the database:
+```bash
+docker-compose down
+```
+
+To view database logs:
+```bash
+docker logs c2_postgres
+```
+
 ### Running the System - Step 1 Testing
 
 #### Terminal 1 - Start the Server:
@@ -151,6 +166,36 @@ C2> help
 C2> exit
 ```
 
+### Querying the Database (Step 3)
+
+**Connect to database:**
+```bash
+docker exec -it c2_postgres psql -U c2admin -d c2_logs
+```
+
+**View logged events:**
+```sql
+SELECT * FROM events ORDER BY timestamp DESC LIMIT 10;
+```
+
+**View sent commands:**
+```sql
+SELECT * FROM commands ORDER BY timestamp DESC LIMIT 10;
+```
+
+**View command results:**
+```sql
+SELECT * FROM results ORDER BY timestamp DESC LIMIT 10;
+```
+
+**Join commands with their results:**
+```sql
+SELECT c.timestamp, c.client_id, c.command, r.success, r.result
+FROM commands c
+LEFT JOIN results r ON c.command_id = r.command_id
+ORDER BY c.timestamp DESC;
+```
+
 ## Configuration
 
 All configuration is centralized in [config.py](config.py). No hardcoded values. Key settings:
@@ -189,12 +234,17 @@ C2_server/
 │   ├── main.py           # Server entry point
 │   ├── c2_server.py      # Core server logic
 │   ├── cli.py            # Admin CLI interface
-│   └── protocol.py       # Message framing & encryption
+│   ├── protocol.py       # Message framing & encryption
+│   ├── db_logger.py      # Database logging (Step 3)
+│   └── init_db.sql       # Database schema (Step 3)
 ├── client/
 │   ├── __init__.py
 │   └── c2_client.py      # Demo client/agent
 ├── tests/
-│   └── (test files)
+│   ├── test_protocol.py     # Protocol tests
+│   ├── test_encryption.py   # Encryption tests
+│   ├── test_cd_command.py   # CD command tests
+│   └── test_integration.py  # Integration tests
 ├── config.py             # Centralized configuration
 ├── requirements.txt      # Python dependencies
 ├── docker-compose.yml    # Database setup (Step 3)
@@ -217,10 +267,12 @@ C2_server/
 - [x] All communication encrypted
 - [x] Encryption tests passing (5/5)
 
-### 📋 Step 3 - Microservice Architecture
-- [ ] PostgreSQL database setup
-- [ ] Log all events to database
-- [ ] Store commands and results
+### ✅ Step 3 - Microservice Architecture (COMPLETED)
+- [x] PostgreSQL database setup with Docker Compose
+- [x] Log all events to database (client connect/disconnect)
+- [x] Store commands and results in database
+- [x] Database logger with connection pooling
+- [x] Database logging tests passing (1/1)
 
 ### 🚧 Step 4 - Advanced Functionality
 - [x] Bash command execution (implemented)
