@@ -18,69 +18,69 @@ class TestCdCommand:
         client = C2Client("127.0.0.1", 8888, encryption_key=None)
 
         # Change to /tmp
-        result, success = await client.execute_cd_command("/tmp")
+        result, success = await client.executor.execute_cd("/tmp")
 
         assert success is True
-        assert client.working_directory == "/tmp"
+        assert client.executor.working_directory == "/tmp"
         assert "Changed directory to /tmp" in result
 
     async def test_cd_to_nonexistent_directory(self):
         """Test changing to a nonexistent directory"""
         client = C2Client("127.0.0.1", 8888, encryption_key=None)
 
-        result, success = await client.execute_cd_command("/nonexistent_dir_12345")
+        result, success = await client.executor.execute_cd("/nonexistent_dir_12345")
 
         assert success is False
         assert "No such file or directory" in result
         # Working directory should not change
-        assert client.working_directory != "/nonexistent_dir_12345"
+        assert client.executor.working_directory != "/nonexistent_dir_12345"
 
     async def test_cd_relative_path(self):
         """Test changing to a relative directory"""
         client = C2Client("127.0.0.1", 8888, encryption_key=None)
 
         # Set initial directory to /tmp
-        client.working_directory = "/tmp"
+        client.executor.working_directory = "/tmp"
 
         # Create a temp directory for testing
         with tempfile.TemporaryDirectory(dir="/tmp") as tmpdir:
             dirname = os.path.basename(tmpdir)
-            result, success = await client.execute_cd_command(dirname)
+            result, success = await client.executor.execute_cd(dirname)
 
             assert success is True
-            assert client.working_directory == tmpdir
+            assert client.executor.working_directory == tmpdir
 
     async def test_cd_parent_directory(self):
         """Test changing to parent directory"""
         client = C2Client("127.0.0.1", 8888, encryption_key=None)
 
         # Start in /tmp/test
-        client.working_directory = "/tmp"
+        client.executor.working_directory = "/tmp"
 
         # Go to parent
-        result, success = await client.execute_cd_command("..")
+        result, success = await client.executor.execute_cd("..")
 
         assert success is True
-        assert client.working_directory == "/"
+        assert client.executor.working_directory == "/"
 
     async def test_cd_home_directory(self):
         """Test changing to home directory with ~"""
         client = C2Client("127.0.0.1", 8888, encryption_key=None)
 
-        result, success = await client.execute_cd_command("~")
+        result, success = await client.executor.execute_cd("~")
 
         assert success is True
-        assert client.working_directory == os.path.expanduser("~")
+        assert client.executor.working_directory == os.path.expanduser("~")
 
     async def test_bash_command_uses_working_directory(self):
         """Test that bash commands execute in the working directory"""
         client = C2Client("127.0.0.1", 8888, encryption_key=None)
 
         # Change to /tmp
-        client.working_directory = "/tmp"
+        client.executor.working_directory = "/tmp"
 
         # Run pwd command
-        result, success = await client.execute_bash_command("pwd")
+        result, success = await client.executor.execute_bash("pwd")
 
         assert success is True
         assert "/tmp" in result.strip()
@@ -91,11 +91,11 @@ class TestCdCommand:
         client2 = C2Client("127.0.0.1", 8888, encryption_key=None)
 
         # Change client1 to /tmp
-        await client1.execute_cd_command("/tmp")
+        await client1.executor.execute_cd("/tmp")
 
         # Change client2 to /
-        await client2.execute_cd_command("/")
+        await client2.executor.execute_cd("/")
 
         # Verify they are independent
-        assert client1.working_directory == "/tmp"
-        assert client2.working_directory == "/"
+        assert client1.executor.working_directory == "/tmp"
+        assert client2.executor.working_directory == "/"
