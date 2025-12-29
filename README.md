@@ -156,6 +156,25 @@ C2> status <client_id>
 C2> bash <client_id> ls -la
 ```
 
+**Query database events:**
+```
+C2> db events [limit]
+```
+Example:
+```
+C2> db events 20
+```
+
+**Query database commands:**
+```
+C2> db commands [limit]
+```
+
+**Query database results:**
+```
+C2> db results [limit]
+```
+
 **Show help:**
 ```
 C2> help
@@ -167,6 +186,29 @@ C2> exit
 ```
 
 ### Querying the Database (Step 3)
+
+**Option 1: Query from Server CLI (Recommended)**
+
+The server CLI provides built-in commands to query the database:
+
+```
+C2> db events 10
+```
+Shows recent events including:
+- Client connections/disconnections
+- Heartbeats from clients (logged every 30 seconds)
+
+```
+C2> db commands 10
+```
+Shows recently sent commands with type and command text.
+
+```
+C2> db results 10
+```
+Shows command execution results with success status.
+
+**Option 2: Direct Database Access**
 
 **Connect to database:**
 ```bash
@@ -269,9 +311,10 @@ C2_server/
 
 ### ✅ Step 3 - Microservice Architecture (COMPLETED)
 - [x] PostgreSQL database setup with Docker Compose
-- [x] Log all events to database (client connect/disconnect)
+- [x] Log all events to database (client connect/disconnect, heartbeats)
 - [x] Store commands and results in database
 - [x] Database logger with connection pooling
+- [x] CLI commands for querying database (db events/commands/results)
 - [x] Database logging tests passing (1/1)
 
 ### 🚧 Step 4 - Advanced Functionality
