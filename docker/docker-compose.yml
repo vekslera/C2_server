@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  postgres:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.postgres
+    container_name: c2_postgres
+    environment:
+      POSTGRES_DB: c2_logs
+      POSTGRES_USER: c2admin
+      POSTGRES_PASSWORD: c2password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U c2admin -d c2_logs"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - c2_network
+
+  c2_server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.server
+    container_name: c2_server
+    environment:
+      C2_SERVER_HOST: 0.0.0.0
+      C2_SERVER_PORT: 8888
+      C2_DB_HOST: postgres
+      C2_DB_PORT: 5432
+      C2_DB_NAME: c2_logs
+      C2_DB_USER: c2admin
+      C2_DB_PASSWORD: c2password
+      C2_LOG_LEVEL: INFO
+    ports:
+      - "8888:8888"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    stdin_open: true
+    tty: true
+    networks:
+      - c2_network
+
+  c2_client:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.client
+    environment:
+      C2_CLIENT_SERVER_HOST: c2_server
+      C2_CLIENT_SERVER_PORT: 8888
+      C2_LOG_LEVEL: INFO
+    depends_on:
+      - c2_server
+    networks:
+      - c2_network
+    # Scale clients with: docker-compose up --scale c2_client=5
+
+volumes:
+  postgres_data:
+
+networks:
+  c2_network:
+    driver: bridge

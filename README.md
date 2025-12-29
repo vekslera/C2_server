@@ -59,37 +59,67 @@ A Python-based Command & Control (C2) server and demo client for cybersecurity t
 ## Quick Start Guide
 
 ### Prerequisites
-- Python 3.10 or higher
-- pip (Python package manager)
-- Docker & Docker Compose (for Step 3 - database)
+- Docker & Docker Compose (recommended)
+- **OR** Python 3.10+ and pip (for local development)
 
-### Installation
+### Option 1: Docker Deployment (Recommended)
+
+The easiest way to run the entire C2 infrastructure with database, server, and clients:
+
+**Start all services:**
+```bash
+cd docker
+docker-compose up --build
+```
+
+This will start:
+- PostgreSQL database with initialized schema
+- C2 server with admin CLI (attached to terminal)
+- One C2 client (auto-connects to server)
+
+**Scale to multiple clients for load testing:**
+```bash
+cd docker
+docker-compose up --build --scale c2_client=10
+```
+
+**Interact with the server CLI:**
+The server terminal is interactive. Type commands directly:
+```
+C2> list
+C2> db events 20
+C2> bash <client_id> whoami
+```
+
+**Stop all services:**
+```bash
+cd docker
+docker-compose down
+```
+
+**Clean up (remove volumes):**
+```bash
+cd docker
+docker-compose down -v
+```
+
+### Option 2: Local Development (Python)
+
+For development and testing without Docker:
 
 **Install Dependencies:**
 ```bash
 pip3 install -r requirements.txt
 ```
 
-**Start Database (Step 3):**
+**Start Database:**
 ```bash
-docker-compose up -d
+cd docker
+docker-compose up postgres -d
 ```
 
-To stop the database:
+**Terminal 1 - Start the Server:**
 ```bash
-docker-compose down
-```
-
-To view database logs:
-```bash
-docker logs c2_postgres
-```
-
-### Running the System - Step 1 Testing
-
-#### Terminal 1 - Start the Server:
-```bash
-cd /home/alexv/C2_server
 python3 server/main.py
 ```
 
@@ -103,9 +133,8 @@ C2 Server CLI - Type 'help' for commands
 C2>
 ```
 
-#### Terminal 2 - Start a Client:
+**Terminal 2 - Start a Client:**
 ```bash
-cd /home/alexv/C2_server
 python3 client/c2_client.py
 ```
 
@@ -114,14 +143,22 @@ You should see:
 Connected to C2 Server. Client ID: abc-123-def-456...
 ```
 
-### Manual Testing Instructions for Step 1
+**Stop database:**
+```bash
+cd docker
+docker-compose down
+```
 
-1. **Start the server** in Terminal 1
-2. **Start 2-3 clients** in separate terminals (repeat the client command)
-3. **List clients**: Type `list` in server CLI - verify all clients appear
-4. **Test echo**: Type `echo <client_id> Hello World` - verify response appears
-5. **Test kill**: Type `kill <client_id>` - verify client disconnects
-6. **Exit server**: Type `exit` - verify graceful shutdown
+### Testing the System
+
+Whether using Docker or local Python:
+
+1. **List clients**: Type `list` in server CLI
+2. **Test echo**: `echo <client_id> Hello World`
+3. **Test bash**: `bash <client_id> ls -la`
+4. **Query database**: `db events 10`
+5. **Test kill**: `kill <client_id>`
+6. **Exit**: `exit`
 
 ### Server CLI Commands
 
@@ -277,11 +314,18 @@ C2_server/
 │   ├── c2_server.py      # Core server logic
 │   ├── cli.py            # Admin CLI interface
 │   ├── protocol.py       # Message framing & encryption
-│   ├── db_logger.py      # Database logging (Step 3)
-│   └── init_db.sql       # Database schema (Step 3)
+│   ├── db_logger.py      # Database logging
+│   └── init_db.sql       # Database schema
 ├── client/
 │   ├── __init__.py
-│   └── c2_client.py      # Demo client/agent
+│   ├── c2_client.py      # Demo client/agent
+│   └── command_executor.py  # Command execution logic
+├── docker/
+│   ├── Dockerfile.postgres  # PostgreSQL container
+│   ├── Dockerfile.server    # C2 server container
+│   ├── Dockerfile.client    # C2 client container
+│   ├── docker-compose.yml   # Complete infrastructure
+│   └── .dockerignore        # Docker build exclusions
 ├── tests/
 │   ├── test_protocol.py     # Protocol tests
 │   ├── test_encryption.py   # Encryption tests
@@ -289,7 +333,6 @@ C2_server/
 │   └── test_integration.py  # Integration tests
 ├── config.py             # Centralized configuration
 ├── requirements.txt      # Python dependencies
-├── docker-compose.yml    # Database setup (Step 3)
 └── README.md            # This file
 ```
 

@@ -1,0 +1,16 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy all application files
+COPY . .
+
+# Expose C2 server port
+EXPOSE 8888
+
+# Run the server
+CMD ["python3", "server/main.py"]

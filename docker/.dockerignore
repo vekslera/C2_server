@@ -1,0 +1,36 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+.pytest_cache
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Documentation
+*.md
+!requirements.txt
+
+# Docker
+Dockerfile*
+docker-compose.yml
+
+# Tests (optional - remove if you want tests in container)
+# tests/
+
+# Environment
+.env

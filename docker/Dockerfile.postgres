@@ -1,0 +1,12 @@
+FROM postgres:15-alpine
+
+# Copy initialization script
+COPY server/init_db.sql /docker-entrypoint-initdb.d/
+
+# Set default environment variables (can be overridden in docker-compose)
+ENV POSTGRES_DB=c2_logs
+ENV POSTGRES_USER=c2admin
+ENV POSTGRES_PASSWORD=c2password
+
+# Expose PostgreSQL port
+EXPOSE 5432
