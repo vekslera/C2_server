@@ -26,11 +26,11 @@ async def main():
     db_logger = DatabaseLogger()
     db_logger.connect()
 
-    # Initialize server with AES-256-GCM encryption (Step 2)
+    # Initialize server with ECDH encryption
     server = C2Server(
         config.SERVER_HOST,
         config.SERVER_PORT,
-        encryption_key=config.ENCRYPTION_PSK
+        use_ecdh=True  # Use ECDH key exchange instead of PSK
     )
 
     # Inject database logger into server (Step 3)

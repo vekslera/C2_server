@@ -17,9 +17,10 @@ import config
 class LoadTestClient:
     """Simplified client for load testing"""
 
-    def __init__(self, client_id: int, protocol: ProtocolHandler):
+    def __init__(self, client_id: int, use_ecdh: bool = True):
         self.client_id = client_id
-        self.protocol = protocol
+        self.use_ecdh = use_ecdh
+        self.protocol = None
         self.reader = None
         self.writer = None
         self.connected = False
@@ -33,6 +34,32 @@ class LoadTestClient:
                 asyncio.open_connection(host, port),
                 timeout=10.0
             )
+
+            # Initialize protocol handler
+            if self.use_ecdh:
+                self.protocol = ProtocolHandler(use_ecdh=True)
+            else:
+                encryption_key = config.ENCRYPTION_PSK if hasattr(config, 'ENCRYPTION_PSK') else None
+                self.protocol = ProtocolHandler(encryption_key)
+
+            # Perform ECDH key exchange if enabled
+            if self.use_ecdh:
+                # Receive server's public key (32 bytes)
+                server_pubkey = await asyncio.wait_for(
+                    self.reader.read(32),
+                    timeout=5.0
+                )
+                if len(server_pubkey) != 32:
+                    self.errors += 1
+                    return False
+
+                # Send client's public key
+                client_pubkey = self.protocol.get_public_key_bytes()
+                self.writer.write(client_pubkey)
+                await self.writer.drain()
+
+                # Derive shared encryption key
+                self.protocol.derive_shared_key(server_pubkey)
 
             # Read welcome message
             welcome = await asyncio.wait_for(
@@ -56,10 +83,11 @@ class LoadTestClient:
         try:
             start_time = time.time()
 
-            # Send echo command
+            # Send heartbeat command
+            from datetime import datetime
             await self.protocol.write_message(self.writer, {
-                "type": "echo",
-                "message": data
+                "type": "heartbeat",
+                "timestamp": datetime.now().isoformat()
             })
 
             # Wait for response
@@ -71,7 +99,7 @@ class LoadTestClient:
             end_time = time.time()
             response_time = (end_time - start_time) * 1000  # Convert to ms
 
-            if response:
+            if response and response.get("type") == "heartbeat_ack":
                 self.response_times.append(response_time)
                 return response_time
             else:
@@ -93,12 +121,10 @@ class LoadTestClient:
 class LoadTester:
     """Main load testing orchestrator"""
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 8888):
+    def __init__(self, host: str = "127.0.0.1", port: int = 8888, use_ecdh: bool = True):
         self.host = host
         self.port = port
-        # Initialize protocol with encryption key
-        encryption_key = config.ENCRYPTION_PSK if hasattr(config, 'ENCRYPTION_PSK') else None
-        self.protocol = ProtocolHandler(encryption_key)
+        self.use_ecdh = use_ecdh
         self.clients: List[LoadTestClient] = []
 
     async def test_connection_load(self, num_clients: int) -> Dict[str, Any]:
@@ -110,7 +136,7 @@ class LoadTester:
         start_time = time.time()
 
         # Create clients
-        self.clients = [LoadTestClient(i, self.protocol) for i in range(num_clients)]
+        self.clients = [LoadTestClient(i, self.use_ecdh) for i in range(num_clients)]
 
         # Connect all clients in parallel
         print(f"Connecting {num_clients} clients...")
@@ -320,10 +346,15 @@ async def main():
     parser.add_argument("--clients", type=int, default=10, help="Number of clients (default: 10)")
     parser.add_argument("--commands", type=int, default=10, help="Commands per client (default: 10)")
     parser.add_argument("--duration", type=int, default=10, help="Sustained load duration in seconds (default: 10)")
+    parser.add_argument("--use-ecdh", action="store_true", default=True, help="Use ECDH encryption (default: True)")
+    parser.add_argument("--use-psk", action="store_true", help="Use PSK encryption instead of ECDH")
 
     args = parser.parse_args()
 
-    tester = LoadTester(host=args.host, port=args.port)
+    # Use PSK if explicitly requested, otherwise use ECDH
+    use_ecdh = not args.use_psk
+
+    tester = LoadTester(host=args.host, port=args.port, use_ecdh=use_ecdh)
     await tester.run_full_test(
         num_clients=args.clients,
         commands_per_client=args.commands,

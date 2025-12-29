@@ -6,15 +6,24 @@ Protocol Format:
 - 4-byte length prefix (big-endian) indicating payload size
 - JSON payload (optionally encrypted)
 
-Citation: Length-prefixed framing pattern adapted from Python asyncio documentation
-https://docs.python.org/3/library/asyncio-stream.html
+Key Exchange:
+- ECDH (Elliptic Curve Diffie-Hellman) for secure key derivation
+- X25519 curve for efficient and secure key exchange
+
+Citations:
+- Length-prefixed framing: Python asyncio documentation (https://docs.python.org/3/library/asyncio-stream.html)
+- ECDH: Cryptography library documentation (https://cryptography.io/en/latest/hazmat/primitives/asymmetric/x25519/)
+- HKDF: Cryptography library documentation (https://cryptography.io/en/latest/hazmat/primitives/kdf/hkdf/)
 """
 
 import struct
 import json
 import asyncio
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.exceptions import InvalidTag
 import os
 import config
@@ -23,19 +32,73 @@ import config
 class ProtocolHandler:
     """Handles message encoding/decoding with optional encryption"""
 
-    def __init__(self, encryption_key: Optional[bytes] = None):
+    def __init__(self, encryption_key: Optional[bytes] = None, use_ecdh: bool = False):
         """
         Initialize protocol handler
 
         Args:
-            encryption_key: Optional 32-byte key for AES-256-GCM encryption
+            encryption_key: Optional 32-byte key for AES-256-GCM encryption (PSK mode)
+            use_ecdh: If True, use ECDH key exchange instead of PSK
         """
-        self.encryption_enabled = encryption_key is not None
-        if self.encryption_enabled:
+        self.use_ecdh = use_ecdh
+        self.encryption_enabled = encryption_key is not None or use_ecdh
+        self.cipher = None
+
+        if use_ecdh:
+            # Generate ephemeral ECDH key pair
+            self.private_key = X25519PrivateKey.generate()
+            self.public_key = self.private_key.public_key()
+            # Cipher will be initialized after key exchange
+        elif encryption_key is not None:
             # AES-GCM provides authenticated encryption
             # Citation: Cryptography library AESGCM documentation
             # https://cryptography.io/en/latest/hazmat/primitives/aead/
             self.cipher = AESGCM(encryption_key)
+
+    def get_public_key_bytes(self) -> bytes:
+        """
+        Get the public key as bytes for transmission
+
+        Returns:
+            32-byte public key
+        """
+        if not self.use_ecdh:
+            raise ValueError("ECDH not enabled")
+
+        return self.public_key.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw
+        )
+
+    def derive_shared_key(self, peer_public_key_bytes: bytes) -> None:
+        """
+        Perform ECDH key exchange and derive AES key
+
+        Args:
+            peer_public_key_bytes: Peer's 32-byte public key
+        """
+        if not self.use_ecdh:
+            raise ValueError("ECDH not enabled")
+
+        # Load peer's public key
+        peer_public_key = X25519PublicKey.from_public_bytes(peer_public_key_bytes)
+
+        # Perform ECDH to get shared secret
+        shared_secret = self.private_key.exchange(peer_public_key)
+
+        # Derive 32-byte AES key using HKDF
+        # Citation: HKDF for key derivation
+        # https://cryptography.io/en/latest/hazmat/primitives/kdf/hkdf/
+        kdf = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=None,
+            info=b'c2-server-encryption-key',
+        )
+        derived_key = kdf.derive(shared_secret)
+
+        # Initialize cipher with derived key
+        self.cipher = AESGCM(derived_key)
 
     def encode_message(self, message: Dict[str, Any]) -> bytes:
         """
