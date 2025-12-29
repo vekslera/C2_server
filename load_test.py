@@ -6,20 +6,21 @@ Connects multiple clients, sends commands, and measures performance
 import asyncio
 import time
 import statistics
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import sys
 sys.path.insert(0, '.')
 
 from server.protocol import ProtocolHandler
+from server.encryption_strategy import EncryptionStrategy, ECDHEncryptionStrategy, PSKEncryptionStrategy
 import config
 
 
 class LoadTestClient:
     """Simplified client for load testing"""
 
-    def __init__(self, client_id: int, use_ecdh: bool = True):
+    def __init__(self, client_id: int, encryption_strategy: Optional[EncryptionStrategy] = None):
         self.client_id = client_id
-        self.use_ecdh = use_ecdh
+        self.encryption_strategy = encryption_strategy
         self.protocol = None
         self.reader = None
         self.writer = None
@@ -35,31 +36,11 @@ class LoadTestClient:
                 timeout=10.0
             )
 
-            # Initialize protocol handler
-            if self.use_ecdh:
-                self.protocol = ProtocolHandler(use_ecdh=True)
-            else:
-                encryption_key = config.ENCRYPTION_PSK if hasattr(config, 'ENCRYPTION_PSK') else None
-                self.protocol = ProtocolHandler(encryption_key)
+            # Initialize protocol handler with encryption strategy
+            self.protocol = ProtocolHandler(self.encryption_strategy)
 
-            # Perform ECDH key exchange if enabled
-            if self.use_ecdh:
-                # Receive server's public key (32 bytes)
-                server_pubkey = await asyncio.wait_for(
-                    self.reader.read(32),
-                    timeout=5.0
-                )
-                if len(server_pubkey) != 32:
-                    self.errors += 1
-                    return False
-
-                # Send client's public key
-                client_pubkey = self.protocol.get_public_key_bytes()
-                self.writer.write(client_pubkey)
-                await self.writer.drain()
-
-                # Derive shared encryption key
-                self.protocol.derive_shared_key(server_pubkey)
+            # Perform encryption handshake
+            await self.protocol.perform_handshake(self.reader, self.writer, is_server=False)
 
             # Read welcome message
             welcome = await asyncio.wait_for(
@@ -121,10 +102,10 @@ class LoadTestClient:
 class LoadTester:
     """Main load testing orchestrator"""
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 8888, use_ecdh: bool = True):
+    def __init__(self, host: str = "127.0.0.1", port: int = 8888, encryption_strategy: Optional[EncryptionStrategy] = None):
         self.host = host
         self.port = port
-        self.use_ecdh = use_ecdh
+        self.encryption_strategy = encryption_strategy
         self.clients: List[LoadTestClient] = []
 
     async def test_connection_load(self, num_clients: int) -> Dict[str, Any]:
@@ -135,8 +116,15 @@ class LoadTester:
 
         start_time = time.time()
 
-        # Create clients
-        self.clients = [LoadTestClient(i, self.use_ecdh) for i in range(num_clients)]
+        # Create clients with fresh encryption strategy instances
+        self.clients = []
+        for i in range(num_clients):
+            # Create fresh ECDH instance for each client
+            if isinstance(self.encryption_strategy, ECDHEncryptionStrategy):
+                client_strategy = ECDHEncryptionStrategy()
+            else:
+                client_strategy = self.encryption_strategy
+            self.clients.append(LoadTestClient(i, client_strategy))
 
         # Connect all clients in parallel
         print(f"Connecting {num_clients} clients...")
@@ -346,15 +334,26 @@ async def main():
     parser.add_argument("--clients", type=int, default=10, help="Number of clients (default: 10)")
     parser.add_argument("--commands", type=int, default=10, help="Commands per client (default: 10)")
     parser.add_argument("--duration", type=int, default=10, help="Sustained load duration in seconds (default: 10)")
-    parser.add_argument("--use-ecdh", action="store_true", default=True, help="Use ECDH encryption (default: True)")
     parser.add_argument("--use-psk", action="store_true", help="Use PSK encryption instead of ECDH")
+    parser.add_argument("--no-encryption", action="store_true", help="Disable encryption")
 
     args = parser.parse_args()
 
-    # Use PSK if explicitly requested, otherwise use ECDH
-    use_ecdh = not args.use_psk
+    # Determine encryption strategy
+    if args.no_encryption:
+        encryption_strategy = None
+    elif args.use_psk:
+        psk = config.ENCRYPTION_PSK if hasattr(config, 'ENCRYPTION_PSK') else None
+        if psk:
+            encryption_strategy = PSKEncryptionStrategy(psk)
+        else:
+            print("ERROR: PSK not configured")
+            return
+    else:
+        # Default to ECDH
+        encryption_strategy = ECDHEncryptionStrategy()
 
-    tester = LoadTester(host=args.host, port=args.port, use_ecdh=use_ecdh)
+    tester = LoadTester(host=args.host, port=args.port, encryption_strategy=encryption_strategy)
     await tester.run_full_test(
         num_clients=args.clients,
         commands_per_client=args.commands,

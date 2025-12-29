@@ -4,101 +4,51 @@ Handles message framing with length-prefixed protocol and encryption
 
 Protocol Format:
 - 4-byte length prefix (big-endian) indicating payload size
-- JSON payload (optionally encrypted)
+- JSON payload (optionally encrypted based on encryption strategy)
 
-Key Exchange:
-- ECDH (Elliptic Curve Diffie-Hellman) for secure key derivation
-- X25519 curve for efficient and secure key exchange
+Design:
+- Uses Strategy pattern for encryption (SOLID principles)
+- Decouples encryption implementation from protocol handling
 
 Citations:
 - Length-prefixed framing: Python asyncio documentation (https://docs.python.org/3/library/asyncio-stream.html)
-- ECDH: Cryptography library documentation (https://cryptography.io/en/latest/hazmat/primitives/asymmetric/x25519/)
-- HKDF: Cryptography library documentation (https://cryptography.io/en/latest/hazmat/primitives/kdf/hkdf/)
 """
 
 import struct
 import json
 import asyncio
-from typing import Dict, Any, Optional, Tuple
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from cryptography.exceptions import InvalidTag
-import os
+from typing import Dict, Any, Optional
+from server.encryption_strategy import EncryptionStrategy, NoEncryptionStrategy
 import config
 
 
 class ProtocolHandler:
-    """Handles message encoding/decoding with optional encryption"""
+    """Handles message encoding/decoding with pluggable encryption strategy"""
 
-    def __init__(self, encryption_key: Optional[bytes] = None, use_ecdh: bool = False):
+    def __init__(self, encryption_strategy: Optional[EncryptionStrategy] = None):
         """
         Initialize protocol handler
 
         Args:
-            encryption_key: Optional 32-byte key for AES-256-GCM encryption (PSK mode)
-            use_ecdh: If True, use ECDH key exchange instead of PSK
+            encryption_strategy: Strategy for encryption (None = no encryption)
         """
-        self.use_ecdh = use_ecdh
-        self.encryption_enabled = encryption_key is not None or use_ecdh
-        self.cipher = None
+        self.encryption_strategy = encryption_strategy or NoEncryptionStrategy()
 
-        if use_ecdh:
-            # Generate ephemeral ECDH key pair
-            self.private_key = X25519PrivateKey.generate()
-            self.public_key = self.private_key.public_key()
-            # Cipher will be initialized after key exchange
-        elif encryption_key is not None:
-            # AES-GCM provides authenticated encryption
-            # Citation: Cryptography library AESGCM documentation
-            # https://cryptography.io/en/latest/hazmat/primitives/aead/
-            self.cipher = AESGCM(encryption_key)
-
-    def get_public_key_bytes(self) -> bytes:
+    async def perform_handshake(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        is_server: bool
+    ) -> None:
         """
-        Get the public key as bytes for transmission
-
-        Returns:
-            32-byte public key
-        """
-        if not self.use_ecdh:
-            raise ValueError("ECDH not enabled")
-
-        return self.public_key.public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw
-        )
-
-    def derive_shared_key(self, peer_public_key_bytes: bytes) -> None:
-        """
-        Perform ECDH key exchange and derive AES key
+        Perform encryption handshake if needed
 
         Args:
-            peer_public_key_bytes: Peer's 32-byte public key
+            reader: Stream reader for receiving data
+            writer: Stream writer for sending data
+            is_server: True if this is the server side, False if client
         """
-        if not self.use_ecdh:
-            raise ValueError("ECDH not enabled")
-
-        # Load peer's public key
-        peer_public_key = X25519PublicKey.from_public_bytes(peer_public_key_bytes)
-
-        # Perform ECDH to get shared secret
-        shared_secret = self.private_key.exchange(peer_public_key)
-
-        # Derive 32-byte AES key using HKDF
-        # Citation: HKDF for key derivation
-        # https://cryptography.io/en/latest/hazmat/primitives/kdf/hkdf/
-        kdf = HKDF(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=None,
-            info=b'c2-server-encryption-key',
-        )
-        derived_key = kdf.derive(shared_secret)
-
-        # Initialize cipher with derived key
-        self.cipher = AESGCM(derived_key)
+        await self.encryption_strategy.perform_handshake(reader, writer, is_server)
 
     def encode_message(self, message: Dict[str, Any]) -> bytes:
         """
@@ -113,16 +63,8 @@ class ProtocolHandler:
         # Convert to JSON
         json_data = json.dumps(message).encode('utf-8')
 
-        # Encrypt if enabled
-        if self.encryption_enabled:
-            # Generate random nonce (12 bytes recommended for GCM)
-            nonce = os.urandom(12)
-            # Encrypt and authenticate
-            encrypted_data = self.cipher.encrypt(nonce, json_data, None)
-            # Prepend nonce to encrypted data
-            payload = nonce + encrypted_data
-        else:
-            payload = json_data
+        # Encrypt using strategy
+        payload = self.encryption_strategy.encrypt(json_data)
 
         # Check max message size
         if len(payload) > config.MAX_MESSAGE_SIZE:
@@ -142,19 +84,8 @@ class ProtocolHandler:
         Returns:
             Decoded message dictionary
         """
-        # Decrypt if enabled
-        if self.encryption_enabled:
-            # Extract nonce (first 12 bytes)
-            nonce = data[:12]
-            encrypted_data = data[12:]
-
-            try:
-                # Decrypt and verify authentication tag
-                json_data = self.cipher.decrypt(nonce, encrypted_data, None)
-            except InvalidTag:
-                raise ValueError("Decryption failed: invalid authentication tag")
-        else:
-            json_data = data
+        # Decrypt using strategy
+        json_data = self.encryption_strategy.decrypt(data)
 
         # Parse JSON
         try:

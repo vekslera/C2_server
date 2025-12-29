@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from server.c2_server import C2Server
 from server.cli import C2CLI
 from server.db_logger import DatabaseLogger
+from server.encryption_strategy import ECDHEncryptionStrategy
 import config
 
 
@@ -26,11 +27,14 @@ async def main():
     db_logger = DatabaseLogger()
     db_logger.connect()
 
+    # Initialize encryption strategy
+    encryption_strategy = ECDHEncryptionStrategy()
+
     # Initialize server with ECDH encryption
     server = C2Server(
         config.SERVER_HOST,
         config.SERVER_PORT,
-        use_ecdh=True  # Use ECDH key exchange instead of PSK
+        encryption_strategy=encryption_strategy
     )
 
     # Inject database logger into server (Step 3)
@@ -42,8 +46,8 @@ async def main():
     # Give server time to start
     await asyncio.sleep(1)
 
-    # Run CLI
-    cli = C2CLI(server)
+    # Run CLI with database access
+    cli = C2CLI(server, database=db_logger.database)
     await cli.run()
 
     # Cleanup

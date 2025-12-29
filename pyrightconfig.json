@@ -1,0 +1,20 @@
+{
+  "include": [
+    "server",
+    "client",
+    "tests"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    ".git",
+    "docker"
+  ],
+  "pythonVersion": "3.10",
+  "pythonPlatform": "Linux",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "warning",
+  "reportMissingTypeStubs": false,
+  "stubPath": "",
+  "venvPath": "",
+  "venv": ""
+}
