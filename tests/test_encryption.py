@@ -6,6 +6,7 @@ Validates AES-256-GCM encryption between server and client
 import pytest
 import config
 from server.protocol import ProtocolHandler
+from server.encryption_strategy import PSKEncryptionStrategy
 
 
 class TestEncryption:
@@ -17,7 +18,7 @@ class TestEncryption:
 
     def test_encrypted_message_differs_from_plaintext(self):
         """Encrypted message should not contain plaintext"""
-        protocol = ProtocolHandler(encryption_key=config.ENCRYPTION_PSK)
+        protocol = ProtocolHandler(encryption_strategy=PSKEncryptionStrategy(config.ENCRYPTION_PSK))
 
         message = {"type": "test", "secret": "sensitive_data"}
         encoded = protocol.encode_message(message)
@@ -28,7 +29,7 @@ class TestEncryption:
 
     def test_encrypted_round_trip(self):
         """Test full encryption and decryption cycle"""
-        protocol = ProtocolHandler(encryption_key=config.ENCRYPTION_PSK)
+        protocol = ProtocolHandler(encryption_strategy=PSKEncryptionStrategy(config.ENCRYPTION_PSK))
 
         original = {
             "type": "command",
@@ -49,8 +50,8 @@ class TestEncryption:
         key1 = b'k' * 32
         key2 = b'x' * 32
 
-        protocol1 = ProtocolHandler(encryption_key=key1)
-        protocol2 = ProtocolHandler(encryption_key=key2)
+        protocol1 = ProtocolHandler(encryption_strategy=PSKEncryptionStrategy(key1))
+        protocol2 = ProtocolHandler(encryption_strategy=PSKEncryptionStrategy(key2))
 
         message = {"type": "test", "data": "secret"}
         encoded = protocol1.encode_message(message)
@@ -61,7 +62,7 @@ class TestEncryption:
 
     def test_nonce_is_random(self):
         """Each encrypted message should have a different nonce"""
-        protocol = ProtocolHandler(encryption_key=config.ENCRYPTION_PSK)
+        protocol = ProtocolHandler(encryption_strategy=PSKEncryptionStrategy(config.ENCRYPTION_PSK))
 
         message = {"type": "test", "data": "same"}
 

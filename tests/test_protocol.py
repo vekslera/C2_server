@@ -5,6 +5,7 @@ Tests for protocol module - message framing and encryption
 import pytest
 import struct
 from server.protocol import ProtocolHandler
+from server.encryption_strategy import NoEncryptionStrategy, PSKEncryptionStrategy
 import config
 
 
@@ -13,7 +14,7 @@ class TestProtocolHandler:
 
     def test_encode_decode_without_encryption(self):
         """Test message encoding and decoding without encryption"""
-        protocol = ProtocolHandler(encryption_key=None)
+        protocol = ProtocolHandler(encryption_strategy=NoEncryptionStrategy())
 
         message = {"type": "test", "data": "hello world"}
         encoded = protocol.encode_message(message)
@@ -30,7 +31,7 @@ class TestProtocolHandler:
     def test_encode_decode_with_encryption(self):
         """Test message encoding and decoding with encryption"""
         key = b'0' * 32  # 32-byte key for AES-256
-        protocol = ProtocolHandler(encryption_key=key)
+        protocol = ProtocolHandler(encryption_strategy=PSKEncryptionStrategy(key))
 
         message = {"type": "test", "data": "secret message"}
         encoded = protocol.encode_message(message)
@@ -44,8 +45,8 @@ class TestProtocolHandler:
         key1 = b'1' * 32
         key2 = b'2' * 32
 
-        protocol1 = ProtocolHandler(encryption_key=key1)
-        protocol2 = ProtocolHandler(encryption_key=key2)
+        protocol1 = ProtocolHandler(encryption_strategy=PSKEncryptionStrategy(key1))
+        protocol2 = ProtocolHandler(encryption_strategy=PSKEncryptionStrategy(key2))
 
         message = {"type": "test", "data": "secret"}
         encoded = protocol1.encode_message(message)
@@ -56,7 +57,7 @@ class TestProtocolHandler:
 
     def test_large_message(self):
         """Test encoding/decoding large messages"""
-        protocol = ProtocolHandler(encryption_key=None)
+        protocol = ProtocolHandler(encryption_strategy=NoEncryptionStrategy())
 
         # Create large message
         large_data = "x" * 10000
@@ -69,7 +70,7 @@ class TestProtocolHandler:
 
     def test_message_length_validation(self):
         """Test that oversized messages are rejected"""
-        protocol = ProtocolHandler(encryption_key=None)
+        protocol = ProtocolHandler(encryption_strategy=NoEncryptionStrategy())
 
         # Create message exceeding MAX_MESSAGE_SIZE
         oversized_data = "x" * (config.MAX_MESSAGE_SIZE + 1000)

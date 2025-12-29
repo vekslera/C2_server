@@ -21,7 +21,7 @@ class TestC2Integration:
         server = C2Server(
             host="127.0.0.1",
             port=9999,  # Use different port for testing
-            encryption_key=None
+            encryption_strategy=None
         )
 
         # Start server in background
@@ -42,7 +42,7 @@ class TestC2Integration:
         client = C2Client(
             server_host="127.0.0.1",
             server_port=9999,
-            encryption_key=None
+            encryption_strategy=None
         )
 
         # Connect
@@ -68,7 +68,7 @@ class TestC2Integration:
             client = C2Client(
                 server_host="127.0.0.1",
                 server_port=9999,
-                encryption_key=None
+                encryption_strategy=None
             )
             await client.connect()
             clients.append(client)
@@ -88,7 +88,7 @@ class TestC2Integration:
         client = C2Client(
             server_host="127.0.0.1",
             server_port=9999,
-            encryption_key=None
+            encryption_strategy=None
         )
 
         await client.connect()
@@ -122,7 +122,7 @@ class TestC2Integration:
         client = C2Client(
             server_host="127.0.0.1",
             server_port=9999,
-            encryption_key=None
+            encryption_strategy=None
         )
 
         await client.connect()

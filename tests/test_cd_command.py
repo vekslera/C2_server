@@ -15,7 +15,7 @@ class TestCdCommand:
 
     async def test_cd_to_valid_directory(self):
         """Test changing to a valid directory"""
-        client = C2Client("127.0.0.1", 8888, encryption_key=None)
+        client = C2Client("127.0.0.1", 8888, encryption_strategy=None)
 
         # Change to /tmp
         result, success = await client.executor.execute_cd("/tmp")
@@ -26,7 +26,7 @@ class TestCdCommand:
 
     async def test_cd_to_nonexistent_directory(self):
         """Test changing to a nonexistent directory"""
-        client = C2Client("127.0.0.1", 8888, encryption_key=None)
+        client = C2Client("127.0.0.1", 8888, encryption_strategy=None)
 
         result, success = await client.executor.execute_cd("/nonexistent_dir_12345")
 
@@ -37,7 +37,7 @@ class TestCdCommand:
 
     async def test_cd_relative_path(self):
         """Test changing to a relative directory"""
-        client = C2Client("127.0.0.1", 8888, encryption_key=None)
+        client = C2Client("127.0.0.1", 8888, encryption_strategy=None)
 
         # Set initial directory to /tmp
         client.executor.working_directory = "/tmp"
@@ -52,7 +52,7 @@ class TestCdCommand:
 
     async def test_cd_parent_directory(self):
         """Test changing to parent directory"""
-        client = C2Client("127.0.0.1", 8888, encryption_key=None)
+        client = C2Client("127.0.0.1", 8888, encryption_strategy=None)
 
         # Start in /tmp/test
         client.executor.working_directory = "/tmp"
@@ -65,7 +65,7 @@ class TestCdCommand:
 
     async def test_cd_home_directory(self):
         """Test changing to home directory with ~"""
-        client = C2Client("127.0.0.1", 8888, encryption_key=None)
+        client = C2Client("127.0.0.1", 8888, encryption_strategy=None)
 
         result, success = await client.executor.execute_cd("~")
 
@@ -74,7 +74,7 @@ class TestCdCommand:
 
     async def test_bash_command_uses_working_directory(self):
         """Test that bash commands execute in the working directory"""
-        client = C2Client("127.0.0.1", 8888, encryption_key=None)
+        client = C2Client("127.0.0.1", 8888, encryption_strategy=None)
 
         # Change to /tmp
         client.executor.working_directory = "/tmp"
@@ -87,8 +87,8 @@ class TestCdCommand:
 
     async def test_multiple_clients_independent_directories(self):
         """Test that different clients maintain separate working directories"""
-        client1 = C2Client("127.0.0.1", 8888, encryption_key=None)
-        client2 = C2Client("127.0.0.1", 8888, encryption_key=None)
+        client1 = C2Client("127.0.0.1", 8888, encryption_strategy=None)
+        client2 = C2Client("127.0.0.1", 8888, encryption_strategy=None)
 
         # Change client1 to /tmp
         await client1.executor.execute_cd("/tmp")
