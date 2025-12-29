@@ -65,13 +65,13 @@ Examples:
             return
 
         print(f"\nConnected Clients ({len(clients)}):")
-        print("-" * 80)
-        print(f"{'Client ID':<38} {'Address':<22} {'Status':<10}")
-        print("-" * 80)
+        print("-" * config.CLI_TABLE_WIDTH_STANDARD)
+        print(f"{'Client ID':<{config.CLI_CLIENT_ID_WIDTH}} {'Address':<{config.CLI_ADDRESS_WIDTH}} {'Status':<{config.CLI_STATUS_WIDTH}}")
+        print("-" * config.CLI_TABLE_WIDTH_STANDARD)
 
         for client in clients:
             status = "Alive" if client["is_alive"] else "Dead"
-            print(f"{client['client_id']:<38} {client['address']:<22} {status:<10}")
+            print(f"{client['client_id']:<{config.CLI_CLIENT_ID_WIDTH}} {client['address']:<{config.CLI_ADDRESS_WIDTH}} {status:<{config.CLI_STATUS_WIDTH}}")
 
         print()
 
@@ -90,7 +90,7 @@ Examples:
             return
 
         print(f"\nClient Status:")
-        print("-" * 50)
+        print("-" * config.CLI_TABLE_WIDTH_NARROW)
         print(f"Client ID:      {client['client_id']}")
         print(f"Address:        {client['address']}")
         print(f"Connected At:   {client['connected_at']}")
@@ -164,7 +164,7 @@ Examples:
             return
 
         table = args[0].lower()
-        limit = int(args[1]) if len(args) > 1 else 10
+        limit = int(args[1]) if len(args) > 1 else config.CLI_DEFAULT_DB_LIMIT
 
         if table not in ["events", "commands", "results"]:
             print(f"Error: Unknown table '{table}'. Use: events, commands, or results")
@@ -186,12 +186,12 @@ Examples:
                     (limit,)
                 )
                 print(f"\nRecent Events (Last {limit}):")
-                print("-" * 100)
-                print(f"{'Timestamp':<20} {'Event Type':<20} {'Client ID':<38} {'Details':<20}")
-                print("-" * 100)
+                print("-" * config.CLI_TABLE_WIDTH_WIDE)
+                print(f"{'Timestamp':<{config.CLI_TIMESTAMP_WIDTH}} {'Event Type':<{config.CLI_EVENT_TYPE_WIDTH}} {'Client ID':<{config.CLI_CLIENT_ID_WIDTH}} {'Details':<{config.CLI_DETAILS_WIDTH}}")
+                print("-" * config.CLI_TABLE_WIDTH_WIDE)
                 for row in cursor.fetchall():
-                    details = (row[3][:17] + "...") if row[3] and len(row[3]) > 20 else (row[3] or "")
-                    print(f"{str(row[0]):<20} {row[1]:<20} {row[2]:<38} {details:<20}")
+                    details = (row[3][:17] + "...") if row[3] and len(row[3]) > config.CLI_DETAILS_WIDTH else (row[3] or "")
+                    print(f"{str(row[0]):<{config.CLI_TIMESTAMP_WIDTH}} {row[1]:<{config.CLI_EVENT_TYPE_WIDTH}} {row[2]:<{config.CLI_CLIENT_ID_WIDTH}} {details:<{config.CLI_DETAILS_WIDTH}}")
 
             elif table == "commands":
                 cursor.execute(
@@ -199,12 +199,12 @@ Examples:
                     (limit,)
                 )
                 print(f"\nRecent Commands (Last {limit}):")
-                print("-" * 100)
-                print(f"{'Timestamp':<20} {'Client ID':<38} {'Type':<10} {'Command':<30}")
-                print("-" * 100)
+                print("-" * config.CLI_TABLE_WIDTH_WIDE)
+                print(f"{'Timestamp':<{config.CLI_TIMESTAMP_WIDTH}} {'Client ID':<{config.CLI_CLIENT_ID_WIDTH}} {'Type':<{config.CLI_COMMAND_TYPE_WIDTH}} {'Command':<{config.CLI_COMMAND_WIDTH}}")
+                print("-" * config.CLI_TABLE_WIDTH_WIDE)
                 for row in cursor.fetchall():
-                    cmd = (row[3][:27] + "...") if len(row[3]) > 30 else row[3]
-                    print(f"{str(row[0]):<20} {row[1]:<38} {row[2]:<10} {cmd:<30}")
+                    cmd = (row[3][:27] + "...") if len(row[3]) > config.CLI_COMMAND_WIDTH else row[3]
+                    print(f"{str(row[0]):<{config.CLI_TIMESTAMP_WIDTH}} {row[1]:<{config.CLI_CLIENT_ID_WIDTH}} {row[2]:<{config.CLI_COMMAND_TYPE_WIDTH}} {cmd:<{config.CLI_COMMAND_WIDTH}}")
 
             elif table == "results":
                 cursor.execute(
@@ -212,12 +212,12 @@ Examples:
                     (limit,)
                 )
                 print(f"\nRecent Results (Last {limit}):")
-                print("-" * 100)
-                print(f"{'Timestamp':<20} {'Client ID':<38} {'Success':<8} {'Result':<30}")
-                print("-" * 100)
+                print("-" * config.CLI_TABLE_WIDTH_WIDE)
+                print(f"{'Timestamp':<{config.CLI_TIMESTAMP_WIDTH}} {'Client ID':<{config.CLI_CLIENT_ID_WIDTH}} {'Success':<{config.CLI_SUCCESS_WIDTH}} {'Result':<{config.CLI_RESULT_WIDTH}}")
+                print("-" * config.CLI_TABLE_WIDTH_WIDE)
                 for row in cursor.fetchall():
-                    result = (row[3][:27] + "...") if row[3] and len(row[3]) > 30 else (row[3] or "")
-                    print(f"{str(row[0]):<20} {row[1]:<38} {str(row[2]):<8} {result:<30}")
+                    result = (row[3][:27] + "...") if row[3] and len(row[3]) > config.CLI_RESULT_WIDTH else (row[3] or "")
+                    print(f"{str(row[0]):<{config.CLI_TIMESTAMP_WIDTH}} {row[1]:<{config.CLI_CLIENT_ID_WIDTH}} {str(row[2]):<{config.CLI_SUCCESS_WIDTH}} {result:<{config.CLI_RESULT_WIDTH}}")
 
             print()
             cursor.close()

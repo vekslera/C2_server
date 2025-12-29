@@ -32,8 +32,8 @@ class DatabaseLogger:
         """
         try:
             self.connection_pool = psycopg2.pool.SimpleConnectionPool(
-                1,  # Min connections
-                10,  # Max connections
+                config.DB_POOL_MIN_CONNECTIONS,
+                config.DB_POOL_MAX_CONNECTIONS,
                 host=config.DB_HOST,
                 port=config.DB_PORT,
                 database=config.DB_NAME,

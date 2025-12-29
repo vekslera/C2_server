@@ -7,7 +7,12 @@ Separated for Single Responsibility Principle
 import os
 import asyncio
 import logging
+import sys
 from typing import Tuple
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import config
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +104,7 @@ class CommandExecutor:
 
             stdout, stderr = await asyncio.wait_for(
                 process.communicate(),
-                timeout=30.0
+                timeout=config.COMMAND_TIMEOUT
             )
 
             output = stdout.decode('utf-8', errors='replace')
@@ -109,6 +114,6 @@ class CommandExecutor:
             return output, process.returncode == 0
 
         except asyncio.TimeoutError:
-            return "Command timed out (30s)", False
+            return f"Command timed out ({config.COMMAND_TIMEOUT}s)", False
         except Exception as e:
             return f"Error: {e}", False

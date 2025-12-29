@@ -36,3 +36,27 @@ DB_PASSWORD = os.getenv("C2_DB_PASSWORD", "c2password")
 
 # Logging Configuration
 LOG_LEVEL = os.getenv("C2_LOG_LEVEL", "INFO")
+
+# CLI Display Configuration
+CLI_TABLE_WIDTH_NARROW = 50  # Width for narrow tables (status)
+CLI_TABLE_WIDTH_STANDARD = 80  # Width for standard tables (client list)
+CLI_TABLE_WIDTH_WIDE = 100  # Width for wide tables (database queries)
+CLI_CLIENT_ID_WIDTH = 38  # UUID string width
+CLI_ADDRESS_WIDTH = 22  # IP:port string width
+CLI_STATUS_WIDTH = 10  # Status field width
+CLI_TIMESTAMP_WIDTH = 20  # Timestamp field width
+CLI_EVENT_TYPE_WIDTH = 20  # Event type field width
+CLI_COMMAND_TYPE_WIDTH = 10  # Command type field width
+CLI_COMMAND_WIDTH = 30  # Command text preview width
+CLI_RESULT_WIDTH = 30  # Result text preview width
+CLI_SUCCESS_WIDTH = 8  # Success boolean width
+CLI_DETAILS_WIDTH = 20  # Details field width
+CLI_DEFAULT_DB_LIMIT = 10  # Default number of database records to show
+
+# Command Execution Configuration
+COMMAND_TIMEOUT = 30.0  # Timeout for bash command execution (seconds)
+COMMAND_QUEUE_TIMEOUT = 1.0  # Timeout for command queue polling (seconds)
+
+# Database Connection Pool Configuration
+DB_POOL_MIN_CONNECTIONS = 1  # Minimum connections in pool
+DB_POOL_MAX_CONNECTIONS = 10  # Maximum connections in pool

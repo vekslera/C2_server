@@ -184,7 +184,7 @@ class C2Client:
                 # Wait for command with timeout to check running flag
                 command = await asyncio.wait_for(
                     self.command_queue.get(),
-                    timeout=1.0
+                    timeout=config.COMMAND_QUEUE_TIMEOUT
                 )
 
                 await self.process_command(command)
