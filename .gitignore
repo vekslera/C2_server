@@ -209,3 +209,6 @@ __marimo__/
 
 GitHub Token
 git_hub_token
+
+# Sensitive protocol documentation
+CLIENT_PROTOCOL_SPEC.md
